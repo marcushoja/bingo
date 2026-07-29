@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, CheckCircle, Check, XCircle, Trash2, Plus, Dices } from 'lucide-react';
+import { RotateCcw, CheckCircle, Check, XCircle, Trash2, Plus, Dices, Pencil, AlertCircle } from 'lucide-react';
 
 // Start-Set, falls der LocalStorage noch leer ist
 const defaultCards = [
@@ -49,6 +49,7 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [cardToDelete, setCardToDelete] = useState(null); // Speichert die Karte, die gelöscht werden soll
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCardId, setEditingCardId] = useState(null); // Speichert die ID der Karte, die bearbeitet wird
   
   // State für die Tombola (Zufallsgenerator)
   const [tombolaState, setTombolaState] = useState({ isOpen: false, number: null, isAnimating: false });
@@ -168,26 +169,78 @@ export default function App() {
     setNewCard({ ...newCard, grid: updatedGrid });
   };
 
+  const openEditModal = (card) => {
+    setEditingCardId(card.id);
+    // Deep copy um das Original nicht beim Tippen schon zu verändern
+    setNewCard({ id: card.id, grid: JSON.parse(JSON.stringify(card.grid)) });
+    setShowAddModal(true);
+  };
+
   const saveNewCard = () => {
     if (!newCard.id.trim()) {
       showToast('Bitte eine Karten-ID eingeben.', 'error');
       return;
     }
     
-    // Prüfen ob ID schon existiert
-    if (cards.some(c => c.id === newCard.id)) {
+    const isEditing = editingCardId !== null;
+
+    // Prüfen ob ID schon existiert (aber ignorieren, wenn wir den Namen der aktuellen Karte nicht geändert haben)
+    if ((!isEditing || newCard.id !== editingCardId) && cards.some(c => c.id === newCard.id)) {
       showToast('Diese Karten-ID existiert bereits.', 'error');
       return;
     }
 
-    setCards([...cards, newCard]);
-    showToast(`Karte ${newCard.id} hinzugefügt!`, 'success');
+    // Validierung: Jede Reihe muss exakt 5 Zahlen haben (90-Ball-Standard) - harte Grenze!
+    for (let rIdx = 0; rIdx < newCard.grid.length; rIdx++) {
+      const row = newCard.grid[rIdx];
+      const numbersInRow = row.filter(val => val !== null).length;
+      
+      if (numbersInRow !== 5) {
+        showToast(`Fehler: Reihe ${rIdx + 1} hat ${numbersInRow} Zahlen. Es müssen exakt 5 sein!`, 'error');
+        return; // Speichern abbrechen
+      }
+    }
+
+    // Weiche Validierung: Prüfen ob Zahlen in den "richtigen" Spalten stehen
+    let columnWarning = false;
+    newCard.grid.forEach(row => {
+      row.forEach((val, cIdx) => {
+        if (val !== null) {
+          if (cIdx === 0 && (val < 1 || val > 9)) columnWarning = true;
+          else if (cIdx === 1 && (val < 10 || val > 19)) columnWarning = true;
+          else if (cIdx === 2 && (val < 20 || val > 29)) columnWarning = true;
+          else if (cIdx === 3 && (val < 30 || val > 39)) columnWarning = true;
+          else if (cIdx === 4 && (val < 40 || val > 49)) columnWarning = true;
+          else if (cIdx === 5 && (val < 50 || val > 59)) columnWarning = true;
+          else if (cIdx === 6 && (val < 60 || val > 69)) columnWarning = true;
+          else if (cIdx === 7 && (val < 70 || val > 79)) columnWarning = true;
+          else if (cIdx === 8 && (val < 80 || val > 90)) columnWarning = true;
+        }
+      });
+    });
+
+    // Speichern (entweder aktualisieren oder neu anhängen)
+    if (isEditing) {
+      setCards(cards.map(c => c.id === editingCardId ? newCard : c));
+    } else {
+      setCards([...cards, newCard]);
+    }
+
+    // Toast anzeigen
+    if (columnWarning) {
+      showToast(`Karte gespeichert, aber einige Zahlen sind in unüblichen Spalten (Hinweis).`, 'warning');
+    } else {
+      showToast(`Karte ${newCard.id} ${isEditing ? 'aktualisiert' : 'hinzugefügt'}!`, 'success');
+    }
+    
     setShowAddModal(false);
+    setEditingCardId(null);
     setNewCard({ id: '', grid: JSON.parse(JSON.stringify(emptyGrid)) }); // Deep Copy für leeres Grid
   };
 
   const cancelAddCard = () => {
     setShowAddModal(false);
+    setEditingCardId(null);
     setNewCard({ id: '', grid: JSON.parse(JSON.stringify(emptyGrid)) });
   };
 
@@ -198,9 +251,9 @@ export default function App() {
       <div 
         className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 ease-out flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white font-bold text-sm sm:text-base ${
           toast.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-        } ${toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}
+        } ${toast.type === 'error' ? 'bg-red-600' : toast.type === 'warning' ? 'bg-amber-500' : 'bg-green-600'}`}
       >
-        {toast.type === 'error' ? <XCircle size={20} /> : <Check size={20} />}
+        {toast.type === 'error' ? <XCircle size={20} /> : toast.type === 'warning' ? <AlertCircle size={20} /> : <Check size={20} />}
         {toast.message}
       </div>
 
@@ -283,13 +336,24 @@ export default function App() {
                 {/* Karten Info & Löschen Button */}
                 <div className="flex justify-between items-center mb-3 px-1">
                   <div className="font-bold text-slate-700">Karte <span className="text-indigo-600">#{card.id}</span></div>
-                  <button 
-                    onClick={() => setCardToDelete(card)}
-                    className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors"
-                    title="Karte löschen"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {/* Edit-Button mit Anti-Cheat-Schutz */}
+                    <button 
+                      onClick={() => openEditModal(card)}
+                      disabled={drawnNumbers.size > 0}
+                      className={`p-1.5 rounded transition-colors ${drawnNumbers.size > 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                      title={drawnNumbers.size > 0 ? "Bearbeiten nur vor Spielbeginn möglich" : "Karte bearbeiten"}
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button 
+                      onClick={() => setCardToDelete(card)}
+                      className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors"
+                      title="Karte löschen"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Karten-Gitter */}
@@ -387,8 +451,8 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Plus className="text-indigo-600" />
-              Neue Karte erstellen
+              {editingCardId ? <Pencil className="text-indigo-600" /> : <Plus className="text-indigo-600" />}
+              {editingCardId ? 'Karte bearbeiten' : 'Neue Karte erstellen'}
             </h3>
             
             <div className="mb-6">
@@ -409,6 +473,16 @@ export default function App() {
               
               {/* Container padding und gap verkleinert */}
               <div className="bg-slate-100 p-2 sm:p-3 rounded-xl border border-slate-200 flex flex-col gap-1.5 overflow-x-auto">
+                
+                {/* NEU: Spalten-Beschriftungen */}
+                <div className="flex gap-1 sm:gap-1.5 min-w-max mb-1">
+                  {['1-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80-90'].map((label, i) => (
+                    <div key={`header-${i}`} className="w-8 h-4 sm:w-11 text-center text-[9px] sm:text-[10px] text-slate-400 font-semibold tracking-tighter flex items-end justify-center pb-0.5">
+                      {label}
+                    </div>
+                  ))}
+                </div>
+
                 {newCard.grid.map((row, rIdx) => (
                   <div key={`new-r-${rIdx}`} className="flex gap-1 sm:gap-1.5 min-w-max">
                     {row.map((val, cIdx) => (
