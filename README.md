@@ -1,1 +1,1 @@
-# bingo
+- in Coolify auf Port 80 umstellen (ehemals 3000)
