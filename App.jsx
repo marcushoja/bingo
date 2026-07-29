@@ -35,7 +35,14 @@ export default function App() {
     return defaultCards;
   });
 
-  const [drawnNumbers, setDrawnNumbers] = useState(new Set());
+  // Gezogene Zahlen aus LocalStorage laden
+  const [drawnNumbers, setDrawnNumbers] = useState(() => {
+    const saved = localStorage.getItem('bingo-drawn-numbers');
+    // Set muss aus einem Array wiederhergestellt werden
+    if (saved) return new Set(JSON.parse(saved));
+    return new Set();
+  });
+  
   const [toast, setToast] = useState({ message: '', type: '', visible: false, id: 0 });
   
   // Modals
@@ -50,6 +57,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('bingo-cards', JSON.stringify(cards));
   }, [cards]);
+
+  // Gezogene Zahlen bei Änderung im LocalStorage speichern
+  useEffect(() => {
+    // Set muss in ein Array umgewandelt werden, da JSON Sets nicht direkt speichern kann
+    localStorage.setItem('bingo-drawn-numbers', JSON.stringify(Array.from(drawnNumbers)));
+  }, [drawnNumbers]);
 
   // Toast automatisch verstecken
   useEffect(() => {
@@ -147,9 +160,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-900 pb-20 relative overflow-hidden flex flex-col">
       
-      {/* Toast Notification */}
+      {/* Toast Notification - z-[100] stellt sicher, dass es ÜBER dem z-50 Modal ist */}
       <div 
-        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 ease-out flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white font-bold text-sm sm:text-base ${
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 ease-out flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white font-bold text-sm sm:text-base ${
           toast.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         } ${toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}
       >
@@ -352,9 +365,10 @@ export default function App() {
                 Zahlen eingeben (Leere Felder bleiben Lücken)
               </label>
               
-              <div className="bg-slate-100 p-2 sm:p-4 rounded-xl border border-slate-200 flex flex-col gap-2 overflow-x-auto">
+              {/* Container padding und gap verkleinert */}
+              <div className="bg-slate-100 p-2 sm:p-3 rounded-xl border border-slate-200 flex flex-col gap-1.5 overflow-x-auto">
                 {newCard.grid.map((row, rIdx) => (
-                  <div key={`new-r-${rIdx}`} className="flex gap-1 sm:gap-2 min-w-max">
+                  <div key={`new-r-${rIdx}`} className="flex gap-1 sm:gap-1.5 min-w-max">
                     {row.map((val, cIdx) => (
                       <input
                         key={`new-c-${cIdx}`}
@@ -364,7 +378,8 @@ export default function App() {
                         max="90"
                         value={val === null ? '' : val}
                         onChange={(e) => handleNewCardGridChange(rIdx, cIdx, e.target.value)}
-                        className="w-10 h-10 sm:w-14 sm:h-14 text-center font-bold text-sm sm:text-lg border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none p-0 m-0 [&::-webkit-inner-spin-button]:appearance-none"
+                        /* Boxen verkleinert: w-8 h-8 (Mobil) und w-11 h-11 (Desktop) */
+                        className="w-8 h-8 sm:w-11 sm:h-11 text-center font-bold text-xs sm:text-base border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none p-0 m-0 [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     ))}
                   </div>
