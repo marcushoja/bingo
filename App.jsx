@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, CheckCircle, Check, XCircle, Trash2, Plus } from 'lucide-react';
+import { RotateCcw, CheckCircle, Check, XCircle, Trash2, Plus, Dices } from 'lucide-react';
 
 // Start-Set, falls der LocalStorage noch leer ist
 const defaultCards = [
@@ -49,6 +49,9 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [cardToDelete, setCardToDelete] = useState(null); // Speichert die Karte, die gelöscht werden soll
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  // State für die Tombola (Zufallsgenerator)
+  const [tombolaState, setTombolaState] = useState({ isOpen: false, number: null, isAnimating: false });
   
   // State für die neue Karte, die gerade eingegeben wird
   const [newCard, setNewCard] = useState({ id: '', grid: emptyGrid });
@@ -111,6 +114,37 @@ export default function App() {
   const confirmReset = () => {
     setDrawnNumbers(new Set());
     setShowResetModal(false);
+  };
+
+  // --- Tombola Funktion ---
+  const startTombola = () => {
+    // Alle noch nicht gezogenen Zahlen ermitteln
+    const available = Array.from({ length: 90 }, (_, i) => i + 1).filter(n => !drawnNumbers.has(n));
+    
+    if (available.length === 0) {
+      showToast('Alle 90 Zahlen wurden bereits gezogen!', 'error');
+      return;
+    }
+
+    // Modal öffnen und Animation starten
+    setTombolaState({ isOpen: true, number: '...', isAnimating: true });
+
+    let ticks = 0;
+    const maxTicks = 25; // Länge der Animation
+    
+    const interval = setInterval(() => {
+      ticks++;
+      // Dummy-Zahl für den visuellen "Ratter"-Effekt
+      const randomDummy = Math.floor(Math.random() * 90) + 1;
+      setTombolaState(prev => ({ ...prev, number: randomDummy }));
+
+      if (ticks >= maxTicks) {
+        clearInterval(interval);
+        // Echte, finale Zufallszahl aus dem Pool der verfügbaren Zahlen ziehen
+        const finalNumber = available[Math.floor(Math.random() * available.length)];
+        setTombolaState({ isOpen: true, number: finalNumber, isAnimating: false });
+      }
+    }, 60); // Geschwindigkeit der Animation in ms
   };
 
   // --- Neue Funktionen für Karten-Verwaltung ---
@@ -178,6 +212,14 @@ export default function App() {
             <CheckCircle size={18} className="text-green-600" />
             <span>{drawnNumbers.size}</span>
           </div>
+          <button 
+            onClick={startTombola}
+            className="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg font-bold hover:bg-indigo-100 border border-indigo-200 active:scale-95 transition-all shadow-sm"
+            title="Zufallszahl ziehen"
+          >
+            <Dices size={18} />
+            <span className="hidden sm:inline">Tombola</span>
+          </button>
           <button 
             onClick={() => setShowResetModal(true)} 
             className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-lg font-bold hover:bg-red-100 border border-red-200 active:scale-95 transition-all shadow-sm"
@@ -399,6 +441,48 @@ export default function App() {
                 className="px-5 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors active:scale-95"
               >
                 Karte Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tombola Modal */}
+      {tombolaState.isOpen && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center animate-in zoom-in-95 duration-200 flex flex-col items-center">
+            <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Dices className="text-indigo-600" />
+              Tombola Ziehung
+            </h3>
+            
+            <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black text-white transition-all duration-300 ${
+              tombolaState.isAnimating 
+                ? 'bg-indigo-400 scale-90 shadow-inner' 
+                : 'bg-indigo-600 scale-100 shadow-[0_0_40px_rgba(79,70,229,0.6)]'
+            }`}>
+              {tombolaState.number}
+            </div>
+
+            <div className="mt-6 h-12 flex items-center justify-center">
+              {!tombolaState.isAnimating ? (
+                <p className="text-slate-600 font-medium animate-in fade-in duration-300">
+                  Zahl gefunden! Markiere sie nun im Board.
+                </p>
+              ) : (
+                <p className="text-slate-400 font-medium animate-pulse">
+                  Mische Kugeln...
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 w-full">
+              <button
+                onClick={() => setTombolaState({ ...tombolaState, isOpen: false })}
+                disabled={tombolaState.isAnimating}
+                className="w-full bg-slate-100 text-slate-800 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200"
+              >
+                Schließen
               </button>
             </div>
           </div>
