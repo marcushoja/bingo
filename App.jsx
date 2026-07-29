@@ -50,6 +50,7 @@ export default function App() {
   const [cardToDelete, setCardToDelete] = useState(null); // Speichert die Karte, die gelöscht werden soll
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCardId, setEditingCardId] = useState(null); // Speichert die ID der Karte, die bearbeitet wird
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false); // NEU: Sicherheitsabfrage
   
   // State für die Tombola (Zufallsgenerator)
   const [tombolaState, setTombolaState] = useState({ isOpen: false, number: null, isAnimating: false });
@@ -242,6 +243,70 @@ export default function App() {
     setShowAddModal(false);
     setEditingCardId(null);
     setNewCard({ id: '', grid: JSON.parse(JSON.stringify(emptyGrid)) });
+    setShowGenerateConfirm(false);
+  };
+
+  // --- NEU: Automatische Karten-Generierung ---
+  const handleGenerateClick = () => {
+    // Prüfen, ob schon Zahlen im Raster stehen
+    const hasNumbers = newCard.grid.some(row => row.some(cell => cell !== null));
+    if (hasNumbers) {
+      setShowGenerateConfirm(true); // Inline-Nachfrage aktivieren
+    } else {
+      executeGenerate();
+    }
+  };
+
+  const executeGenerate = () => {
+    const newGrid = [
+      Array(9).fill(null),
+      Array(9).fill(null),
+      Array(9).fill(null)
+    ];
+
+    // 1. Für jede der 3 Reihen exakt 5 Spalten auswählen
+    for (let r = 0; r < 3; r++) {
+      const cols = [];
+      while (cols.length < 5) {
+        const randCol = Math.floor(Math.random() * 9);
+        if (!cols.includes(randCol)) cols.push(randCol);
+      }
+      cols.forEach(c => newGrid[r][c] = true); // Platzhalter setzen
+    }
+
+    // 2. Die Spalten mit passenden Zufallszahlen füllen
+    const colRanges = [
+      { min: 1, max: 9 }, { min: 10, max: 19 }, { min: 20, max: 29 },
+      { min: 30, max: 39 }, { min: 40, max: 49 }, { min: 50, max: 59 },
+      { min: 60, max: 69 }, { min: 70, max: 79 }, { min: 80, max: 90 }
+    ];
+
+    for (let c = 0; c < 9; c++) {
+      const rowsToFill = [];
+      for (let r = 0; r < 3; r++) {
+        if (newGrid[r][c] === true) rowsToFill.push(r);
+      }
+
+      if (rowsToFill.length > 0) {
+        const nums = [];
+        // Keine doppelten Zahlen in der gleichen Spalte
+        while (nums.length < rowsToFill.length) {
+          const num = Math.floor(Math.random() * (colRanges[c].max - colRanges[c].min + 1)) + colRanges[c].min;
+          if (!nums.includes(num)) nums.push(num);
+        }
+        // Von oben nach unten sortieren (Standard-Bingo-Layout)
+        nums.sort((a, b) => a - b);
+        
+        // Eintragen
+        rowsToFill.forEach((r, idx) => {
+          newGrid[r][c] = nums[idx];
+        });
+      }
+    }
+
+    setNewCard(prev => ({ ...prev, grid: newGrid }));
+    setShowGenerateConfirm(false);
+    showToast('Bingo-Karte generiert!', 'success');
   };
 
   return (
@@ -450,10 +515,31 @@ export default function App() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              {editingCardId ? <Pencil className="text-indigo-600" /> : <Plus className="text-indigo-600" />}
-              {editingCardId ? 'Karte bearbeiten' : 'Neue Karte erstellen'}
-            </h3>
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                {editingCardId ? <Pencil className="text-indigo-600" /> : <Plus className="text-indigo-600" />}
+                {editingCardId ? 'Karte bearbeiten' : 'Neue Karte erstellen'}
+              </h3>
+              
+              <div className="flex flex-col items-end">
+                {!showGenerateConfirm ? (
+                  <button 
+                    onClick={handleGenerateClick}
+                    className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-emerald-200 active:scale-95 transition-all"
+                    title="Zufällige Karte generieren"
+                  >
+                    <Dices size={16} />
+                    <span className="hidden sm:inline">Generieren</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 bg-amber-50 p-1.5 rounded-lg border border-amber-200 shadow-sm animate-in fade-in duration-200">
+                    <span className="text-xs font-bold text-amber-800">Überschreiben?</span>
+                    <button onClick={executeGenerate} className="px-3 py-1 bg-amber-600 text-white text-xs font-bold rounded hover:bg-amber-700 active:scale-95 transition-all">Ja</button>
+                    <button onClick={() => setShowGenerateConfirm(false)} className="px-3 py-1 bg-slate-200 text-slate-800 text-xs font-bold rounded hover:bg-slate-300 active:scale-95 transition-all">Nein</button>
+                  </div>
+                )}
+              </div>
+            </div>
             
             <div className="mb-6">
               <label className="block text-sm font-bold text-slate-700 mb-1">Karten-ID / Name</label>
